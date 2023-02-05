@@ -6,6 +6,10 @@ import itertools
 def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weights = None):
     
     '''
+        Reference used for implementation:
+        The description of coupled A* algorithm in [Section: Previous Optimal Solvers, the CBS paper]^*.
+        *: [Conflict-Based Search For Optimal Multi-Agent Path Finding, AAAI 2012]
+
         Inputs: 
 
             G: the graph.
@@ -34,7 +38,7 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
         and len(goal_nodes) == len(set(goal_nodes))) 
     # Pre-emptively eliminate the situation where the agents at start/goal states block one another.
     
-    def recover_path(final_st,cameFrom):
+    def recover_path(final_st,cameFrom): # Helper function for recovering the agents' paths using the cameFrom dictionary.
         path = []
         curr = final_st
         while curr != start_nodes:

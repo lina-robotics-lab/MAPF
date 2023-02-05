@@ -4,6 +4,12 @@ from queue import PriorityQueue
 
 def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weights = None, preserve_t = False):
     '''
+    
+    Reference used for implementation: 
+    1) Wikipedia page for the classical static A* algorithm. 
+    2) The hint of space-time dimensions in the [PBS paper]^* when describing its single-agent path finding. 
+    *:[Searching with Consistent Prioritization for Multi-Agent Path Finding, AAAI-19]
+    
     Inputs:
 
         G: the graph. Assume each edge is associated with a traversal cost.
@@ -25,7 +31,7 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
     Output: path, a list of nodes characterizing the shortest path to goal subjecting to constraints. 
     If a feasible path is not found, None is returned.
     '''
-    def recover_path(final_st,cameFrom):
+    def recover_path(final_st,cameFrom): # Helper function for recovering the agents' paths using the cameFrom dictionary.
         path = []
         curr = final_st
         while curr != (start,0):
