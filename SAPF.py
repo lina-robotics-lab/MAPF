@@ -4,23 +4,26 @@ from queue import PriorityQueue
 
 def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weights = None, preserve_t = False):
     '''
-    Input of the Single-agent Path Finding problem with space-time constraints:
+    Inputs:
 
-    * The graph: G. Assume each edge is associated with a traversal cost.
-    
-    Conceptually, the algorithm operates on a time-graph G^~ = [G_0,G_1,...,G_t,...,] extended from the graph G. All G_t has the same nodes as G. The nodes in G_t are forwardly connected to nodes in G_{t+1} via edges specified by G's edges. If there is a node constraint (sp,t+1), then the connection between (s,t) and (sp,t+1) is removed for all neighbors s of sp.
+        G: the graph. Assume each edge is associated with a traversal cost.
+        
+        Conceptually, the algorithm operates on a time-graph G^~ = [G_0,G_1,...,G_t,...,] extended from the graph G. All G_t has the same nodes as G. The nodes in G_t are forwardly connected to nodes in G_{t+1} via edges specified by G's edges. If there is a node constraint (sp,t+1), then the connection between (s,t) and (sp,t+1) is removed for all neighbors s of sp.
 
-    * The starting node: start
-    * The goal node: goal
-    * Node constraints with time-stamp: (s,t), meaning the agent cannot be at node s at time step t.
-    * Edge constraints with time-stamp: ((s,sp),t), meaning the agent cannot traverse the edge (s,sp) from time step t to t+1. 
-    More explicitly, if the agent is at node s at time step t, it is not allowed to enter sp at the next time step.
-    
-    * preserve_t: if True, the output path is a list of (s,t) pairs. Otherwise, the output is just a list of nodes s.
-   
+        start: the starting node.
+        goal: the goal node.
+        node_constraints: a list of (s,t) tuples, which are node constraints with time-stamps, meaning the agent cannot be at node s at time step t.
+        edge_constraints: a list of ((s,sp),t) tuples, the edge constraints with time-stamps, meaning the agent cannot traverse the edge (s,sp) from time step t to t+1. 
+        More explicitly, if the agent is at node s at time step t, it is not allowed to enter sp at the next time step.
+        
+        edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
+            By default, the edge_weights are all set to 1.
+        preserve_t: if True, the output path is a list of (s,t) pairs. Otherwise, the output is just a list of nodes s.
+       
     Objective: find a path from start to goal that minimizes the total traversal cost.
     
-    Output: path, by default a list of nodes characterizing the shortest path to goal subjecting to constraints. If a feasible path is not found, None is returned.
+    Output: path, a list of nodes characterizing the shortest path to goal subjecting to constraints. 
+    If a feasible path is not found, None is returned.
     '''
     def recover_path(final_st,cameFrom):
         path = []
@@ -70,7 +73,7 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
             if (sp,t+1) not in gScore.keys():
                 gScore[(sp,t+1)] = np.inf
 
-            if curr_gscore + G.edges[(s,sp)]['weight'] < gScore[(sp,t+1)]:
+            if curr_gscore + G.edges[(s,sp)]['weight'] < gScore[(sp,t+1)]: # The A* update
                 cameFrom[(sp,t+1)] = (s,t)
                 gScore[(sp,t+1)] = curr_gscore + G.edges[(s,sp)]['weight']
                 OPEN.put((gScore[(sp,t+1)],(sp,t+1)))
