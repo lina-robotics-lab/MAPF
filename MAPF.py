@@ -24,8 +24,12 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
             edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
             By default, the edge_weights are all set to 1.
         Output:
-            path: a list of joint-state tuples, [(s_1,s_2,...,s_M)], characterizing the conflict-free shortest multi-agent path.
+            path: a list of joint-state tuples, [(s_1,s_2,...,s_M)], the conflict-free multi-agent path with the smallest ^flowtime.
+            ^The flowtime of a multi-agent path is the sum of individual travel costs to the goal nodes. 
             Return None if a conflict free path does not exist(e.g., when two start/goal nodes collides.)
+
+        Comment: using ^makespan as the objective for multi-agent A* is a feature to be implemented in the future.
+        ^The makespan of a multi-agent path is the max of individual travel costs. 
     '''
     
     start_nodes = tuple(start_nodes)
@@ -70,7 +74,7 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
 
         if (curr_nodes == goal_nodes and labeled_goals) \
            or (len(set(curr_nodes).difference(goal_nodes))==0 and not labeled_goals):
-            return recover_path(curr_nodes,cameFrom)
+            return recover_path(curr_nodes,cameFrom), curr_g # curr_g is the flowtime of the solution.
 
 
         neighbors = [list(G[s]) for s in curr_nodes]
@@ -85,10 +89,18 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
                 if joint_nb not in gScore.keys():
                     gScore[joint_nb] = np.inf
 
-                travel_cost = np.sum([G.edges[(s,sp)]['weight'] for (s,sp) in zip(curr_nodes,joint_nb)])
-                if curr_g + travel_cost < gScore[joint_nb]: # The A* update.
+                if labeled_goals:
+                    one_step_costs = (np.array(curr_nodes) != np.array(goal_nodes))\
+                                * np.array([G.edges[(s,sp)]['weight'] for (s,sp) in zip(curr_nodes,joint_nb)])
+                    # In the labeled MAPF problem, the one-step-costs are zero for agents who have reached their goals.
+                else:
+                    one_step_costs = np.array([s!=sp or sp not in goal_nodes for (s,sp) in zip(curr_nodes,joint_nb)])\
+                                * np.array([G.edges[(s,sp)]['weight'] for (s,sp) in zip(curr_nodes,joint_nb)])
+                     # In the unlabeled MAPF problem, the one-step-costs are zero for agents who have stayed in one of the goal nodes.
+
+                if curr_g + np.sum(one_step_costs) < gScore[joint_nb]: # The A* update.
                     cameFrom[joint_nb] = curr_nodes
-                    gScore[joint_nb] = curr_g + travel_cost
+                    gScore[joint_nb] = curr_g + np.sum(one_step_costs)
                     OPEN.put((gScore[joint_nb],joint_nb))
                     
     print('Multi-agent A* solution not found')

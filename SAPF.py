@@ -28,7 +28,10 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
        
     Objective: find a path from start to goal that minimizes the total traversal cost.
     
-    Output: path, a list of nodes characterizing the shortest path to goal subjecting to constraints. 
+    Output: (path, cost). 
+    path is a list of nodes characterizing the shortest path to goal subjecting to constraints. 
+    cost is the cost of the path.
+
     If a feasible path is not found, None is returned.
     '''
     def recover_path(final_st,cameFrom): # Helper function for recovering the agents' paths using the cameFrom dictionary.
@@ -43,6 +46,7 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
         
         if not preserve_t:
             path = [p[0] for p in path]
+        
         return path
 
     assert(start in G.nodes and goal in G.nodes)
@@ -68,7 +72,7 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
         curr_gscore,(s,t) = OPEN.get() # Remove the (s, t) with the smallest gScore.
 
         if s == goal:
-            return recover_path((s,t),cameFrom)
+            return recover_path((s,t),cameFrom),curr_gscore 
 
         constraint_nb = [sp for sp in G[s] if t+1 in G.edges[(s,sp)]['occupied_times']]\
                       + [sp for sp in G[s] if t+1 in G.nodes[sp]['occupied_times']]
