@@ -3,6 +3,54 @@ import networkx as nx
 import numpy as np
 import itertools
 
+def find_conflict(plan):
+    loc_ptrs = [0 for _ in plan]
+
+    def step():
+
+        prev_nodes = [path[loc] for path,loc in zip(plan,loc_ptrs)]
+
+        for i in range(len(plan)):
+            loc_ptrs[i] = min(loc_ptrs[i] + 1, len(plan[i])-1)
+
+        curr_nodes = [path[loc] for path,loc in zip(plan,loc_ptrs)]
+
+        traversed_edges = [tuple(set([s,sp])) for s,sp in zip(prev_nodes,curr_nodes)]
+
+        return curr_nodes, traversed_edges
+
+
+    done = False
+    t = 0
+    conflict = None
+    max_T = np.max([len(path) for path in plan])
+
+    curr_nodes = [path[0] for path in plan]
+
+    while not done:
+
+        if len(curr_nodes) > len(set(curr_nodes)): # Check Node conflict
+            occupants = {s:[] for s in set(curr_nodes)}
+            for agent,s in enumerate(curr_nodes): # The curr_nodes are indexed by agent IDs.
+                occupants[s].append(agent)
+                if len(occupants[s])>=2: # Stop at the first conflict
+                    conflict = [*occupants[s],s,t] # node conflict = (a1,a2,s,t)
+                    return conflict
+
+        done = np.all([loc == len(path)-1 for path,loc in zip(plan,loc_ptrs)])
+
+        curr_nodes,traversed_edges = step()
+
+        if len(traversed_edges) > len(set(traversed_edges)): # Check edge conflict.
+            occupants = {e:[] for e in set(traversed_edges)}
+            for agent,e in enumerate(traversed_edges): # The traversed_edges are indexed by agent IDs.
+                occupants[e].append(agent)
+                if len(occupants[e])>=2: # Stop at the first conflict
+                    conflict = [*occupants[e],e,t] # edge conflict = (a1,a2,(s,sp),t)
+                    return conflict
+        t+=1
+    return conflict
+
 def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weights = None):
     
     '''
@@ -24,7 +72,10 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
             edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
             By default, the edge_weights are all set to 1.
         Output:
-            path: a list of joint-state tuples, [(s_1,s_2,...,s_M)], the conflict-free multi-agent path with the smallest ^flowtime.
+            solution, flowtime: an numpy array of M single-agent paths(M is the number of agents), conflict-free and with the smallest ^flowtime.
+            
+            solution[i] is the path for agent i.
+
             ^The flowtime of a multi-agent path is the sum of individual travel costs to the goal nodes. 
             Return None if a conflict free path does not exist(e.g., when two start/goal nodes collides.)
 
@@ -43,16 +94,16 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
     # Pre-emptively eliminate the situation where the agents at start/goal states block one another.
     
     def recover_path(final_st,cameFrom): # Helper function for recovering the agents' paths using the cameFrom dictionary.
-        path = []
+        solution = []
         curr = final_st
         while curr != start_nodes:
-            path.append(curr)
+            solution.append(curr)
             curr = cameFrom[curr]
 
-        path.append(start_nodes)
-        path.reverse()
+        solution.append(start_nodes)
+        solution.reverse()
 
-        return path
+        return np.array(solution).T
 
     if edge_weights is None:
         edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.

@@ -27,14 +27,14 @@ def flowtime(G, MA_path, goal_nodes):
     '''
         Inputs
             G: the graph.
-            MA_path: a list of tuples [(s1[t],s2[t],...,sM[t]) for t = 1,2,...], the multi-agent path.
+            MA_path: a list of M single-agent paths(M is the number of agents), MA_path[i] is the path for agent i.
             goal_nodes: a list of nodes, the goal nodes.
         Output
             The labeled flowtime. That is, the sum of travel cost for agent i to reach goal_nodes[i]. 
             If some agent has not reaches its goal, return None.
     '''
-    MA_path = np.array(MA_path).T
-    destinations = MA_path[:, -1]
+
+    destinations = np.array([path[-1] for path in MA_path])
     
     if not np.all(destinations == goal_nodes):
         print('Agents {} have not reached the goals.'.format(list(np.argwhere(destinations != goal_nodes).ravel())))
@@ -47,14 +47,13 @@ def makespan(G, MA_path, goal_nodes):
     '''
         Inputs
             G: the graph.
-            MA_path: a list of tuples [(s1[t],s2[t],...,sM[t]) for t = 1,2,...], the multi-agent path.
+            MA_path: a list of M single-agent paths(M is the number of agents), the multi-agent path.
             goal_nodes: a list of nodes, the goal nodes.
         Output
             The labeled makespan. That is, the maximum of travel cost for agent i to reach goal_nodes[i]. 
             If some agent has not reaches its goal, return None.
     '''
-    MA_path = np.array(MA_path).T
-    destinations = MA_path[:, -1]
+    destinations = np.array([path[-1] for path in MA_path])
     
     if not np.all(destinations == goal_nodes):
         print('Agents {} have not reached the goals.'.format(list(np.argwhere(destinations != goal_nodes).ravel())))
