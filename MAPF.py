@@ -8,7 +8,7 @@ from copy import deepcopy
 from metrics import flowtime, makespan
 from SAPF import SpaceTimeAStar
 
-def find_conflict(plan):
+def find_conflict(plan,check_edge_conflicts = False):
     loc_ptrs = [0 for _ in plan]
 
     def step():
@@ -46,7 +46,7 @@ def find_conflict(plan):
 
         curr_nodes,traversed_edges = step()
 
-        if len(traversed_edges) > len(set(traversed_edges)): # Check edge conflict.
+        if check_edge_conflicts and len(traversed_edges) > len(set(traversed_edges)): # Check edge conflict.
             occupants = {e:[] for e in set(traversed_edges)}
             for agent,e in enumerate(traversed_edges): # The traversed_edges are indexed by agent IDs.
                 occupants[e].append(agent)
@@ -56,7 +56,7 @@ def find_conflict(plan):
         t+=1
     return conflict
 
-def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weights = None):
+def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weights = None, check_edge_conflicts = False):
     
     '''
         Reference used for implementation:
@@ -76,6 +76,9 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
            
             edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
             By default, the edge_weights are all set to 1.
+
+            check_edge_conflicts: whether to consider edge conflicts. By default it is not checked.
+
         Output:
             solution, flowtime: an numpy array of M single-agent paths(M is the number of agents), conflict-free and with the smallest ^flowtime.
             
@@ -140,7 +143,7 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
 
              # Check node and edge conflicts  
             if len(joint_nb) == len(set(joint_nb))\
-              and len(traversed_edges)==len(set(traversed_edges)):
+              and (not check_edge_conflicts or len(traversed_edges)==len(set(traversed_edges))):
 
                 if joint_nb not in gScore.keys():
                     gScore[joint_nb] = np.inf
@@ -163,8 +166,8 @@ def MultiAgentAStar(G, start_nodes,goal_nodes, labeled_goals = True, edge_weight
     return None
 
 
-def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = flowtime):
-     '''
+def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = flowtime, check_edge_conflicts = False):
+    '''
         Reference used for implementation:
         The description of coupled A* algorithm in [Section: Previous Optimal Solvers, the CBS paper]^*.
         *: [Conflict-Based Search For Optimal Multi-Agent Path Finding, AAAI 2012]
@@ -185,7 +188,10 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
                 To avoid infinite loops, we stop it when it exceeded an iteration threshold..
             
             metric: the MAPF objective to minimize. By default, it is flowtime. But metric.makespan can also be used if desired.
-
+            
+            check_edge_conflicts: whether to consider edge conflicts. 
+                CBS does not consider edge conflicts by default, and its theoretical optimality only applies to node conflicts as well.
+                We have observed that if considering edge conflicts, the solution of CBS could be worse than multi-agent A*, meaning CBS is not optimal in this case.
         Output:
             solution, cost: an numpy array of M single-agent paths(M is the number of agents), conflict-free and with the smallest cost(flowtime by default).
             
@@ -193,7 +199,7 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
            
     '''
     if edge_weights is None:
-            edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
+        edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
 
     nx.set_edge_attributes(G,edge_weights,'weight')
 
@@ -214,12 +220,15 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
         count+=1 
         # CBS does not have a way to determine infeasibility. 
         # To avoid infinite loops, we stop it when it exceeded an iteration threshold..
-       
+        
+
         cost, node_ID = OPEN.get()
         solution = CT.get_solution(node_ID)
 
         # Look for the first conflict.
-        conflict = find_conflict(solution)
+        conflict = find_conflict(solution,check_edge_conflicts)
+
+        # print(OPEN.queue, conflict,solution)
         if not conflict:
             return solution, cost
         else:
