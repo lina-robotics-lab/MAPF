@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 from queue import PriorityQueue
 
-def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weights = None, preserve_t = False):
+def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , edge_weights = None, preserve_t = False):
     '''
     
     Reference used for implementation: 
@@ -18,10 +18,12 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
 
         start: the starting node.
         goal: the goal node.
-        node_constraints: a list of (s,t) tuples, which are node constraints with time-stamps, meaning the agent cannot be at node s at time step t.
-        edge_constraints: a list of ((s,sp),t) tuples, the edge constraints with time-stamps, meaning the agent cannot traverse the edge (s,sp) from time step t to t+1. 
-        More explicitly, if the agent is at node s at time step t, it is not allowed to enter sp at the next time step.
+        node_constraints: a dictionary {s:[t_1,t_2,...] for s in G.nodes}, which are node constraints with time-stamps, meaning the agent cannot be at node s at time step t_1,t_2....
+        edge_constraints: a dictionary {(s,sp):[t_1,t_2,...] for (s,sp) in G.edges}, the edge constraints with time-stamps, meaning the agent cannot traverse the edge (s,sp) from time step t_i to t_i+1. 
+        More explicitly, if the agent is at node s at time step t, it is not allowed to enter sp at the next time step t+1.
         
+        permanent_obstacles: a list of [(s,T)] pairs, meaning the agent cannot enter node s for all t>=T.
+
         edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
             By default, the edge_weights are all set to 1.
         preserve_t: if True, the output path is a list of (s,t) pairs. Otherwise, the output is just a list of nodes s.
@@ -74,7 +76,7 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
         if s == goal:
             return recover_path((s,t),cameFrom),curr_gscore 
 
-        constraint_nb = [sp for sp in G[s] if t+1 in G.edges[(s,sp)]['occupied_times']]\
+        constraint_nb = [sp for sp in G[s] if t in G.edges[(s,sp)]['occupied_times']]\
                       + [sp for sp in G[s] if t+1 in G.nodes[sp]['occupied_times']]
 
         free_nb =  set(G[s]).difference(constraint_nb) # free_nb are free at time t+1
@@ -88,5 +90,5 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints, edge_weig
                 gScore[(sp,t+1)] = curr_gscore + G.edges[(s,sp)]['weight']
                 OPEN.put((gScore[(sp,t+1)],(sp,t+1)))
     
-    print('Single Agent A* search not feasible.')
+    # print('Single Agent A* search not feasible.')
     return None 
