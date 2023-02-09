@@ -1,4 +1,4 @@
-from queue import PriorityQueue
+from queue import PriorityQueue, deque
 import networkx as nx
 import numpy as np
 import itertools
@@ -244,6 +244,8 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
                 # Construct the constraint set for the agent.
                 node_constraints = {s:set() for s in G}
                 edge_constraints = {e:set() for e in G.edges}
+                edge_constraints.update({e[::-1]:set() for e in G.edges})
+
                 for (agent, cp, tp) in a_constraints:
                     if agent == a:
                         if type(cp) is int:
@@ -308,3 +310,241 @@ class ConstraintTree(nx.Graph):
             self.add_edge(parent_node,new_node_ID)
         
         return new_node_ID
+
+def paths_to_constraints(G,paths):
+    node_constraints = {s:set() for s in G}
+    edge_constraints = {e:set() for e in G.edges}
+    edge_constraints.update({e[::-1]:set() for e in G.edges})
+
+    for path in paths:
+        for t,s in enumerate(path):
+            node_constraints[s].add(t)
+            if t>=1:
+                edge_constraints[path[t-1],path[t]].add(t-1)
+
+    permanent_obstacles = {path[-1]:len(path)-1 for path in paths}
+    
+    return node_constraints,edge_constraints, permanent_obstacles
+
+class PriorityTree(nx.Graph):
+    def __init__(self):
+        super().__init__()
+        
+    def get_solution(self,ID):
+        return self.nodes[ID]['solution']
+    
+    def get_cost(self,ID):
+        return self.nodes[ID]['cost']
+    
+    def get_ordering(self,ID):
+        '''
+            Get the orderings stored at the current PT node and its ancestors.
+        '''
+        return [c for a in nx.ancestors(self,ID).union([ID]) for c in self.__get_ordering_at__(a)]
+   
+    def __get_ordering_at__(self,ID):
+        
+        '''
+            Get the ordering stored at the current PT node only.
+        '''
+        return self.nodes[ID]['ordering']
+    
+    
+    def add_PT_node(self,parent_node,solution, cost, ordering):
+        '''
+            ordering: either [] or a list with a single two-tuple.
+        '''
+        new_node_ID = self.number_of_nodes()
+        self.add_node(new_node_ID, solution=solution,cost=cost, ordering=ordering)
+        
+        if parent_node:
+            self.add_edge(parent_node,new_node_ID)
+        
+        return new_node_ID
+def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = flowtime):
+
+    #### Important convention on ordering tuples #####
+    #  An ordering tuple (a1,a2) means agent a1 has higher priority than agent a2,
+    #  meaning agent a2, along with all its priority descendents, should yield to a1.
+    ##################################################
+
+    if edge_weights is None:
+            edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
+
+    nx.set_edge_attributes(G,edge_weights,'weight')
+
+    # Initialization: 
+    # Plan inidivual paths for agent agent without considering conflicts.
+    # We simply call the standard networkx library.
+    p = nx.shortest_path(G,weight = 'weight') # The [weight] argument here should be the key to weight values in the edge data dictionary.
+    plan0 = [p[s][g] for s, g in zip(start_nodes, goal_nodes)]
+
+    PT = PriorityTree()
+    ROOT = PT.add_PT_node(None,plan0,metric(G,plan0,goal_nodes),[]) # Adding the root node. 
+
+
+    STACK = deque([ROOT])
+
+    count = 0
+    while len(STACK)>0 and count<=max_iter:
+        count+=1 
+        # To avoid infinite loops, we stop the algorithm when it exceeded an iteration threshold..
+
+        parent_node = STACK.popleft()
+        solution = PT.get_solution(parent_node)
+
+        # Look for the first conflict.
+        conflict = find_conflict(solution,check_edge_conflicts = True)
+        if not conflict:
+            return solution, cost
+            # return solution
+        else:
+            a1, a2, c, t = conflict # c could either be a node or an edge.
+
+        # Get orderings upto the current node.
+        prev_ordering = PT.get_ordering(parent_node)
+
+        new_PT_nodes = PriorityQueue()
+
+        # Compute new PT nodes
+        for (j,i) in [(a1,a2),(a2,a1)]:
+
+            new_plan = deepcopy(solution)
+
+            curr_ordering = prev_ordering + [(j,i)] # The second agent in the tuple yields to the first agent
+            # print(curr_ordering)
+            sorted_agents  = list(nx.topological_sort(nx.DiGraph(curr_ordering))) # Get all the agents with lower orderings than i.
+
+            idx_i = np.where(np.array(sorted_agents)==i)[0][0]
+
+            agents_to_avoid = [a for a in sorted_agents[:idx_i]]
+
+            success_update = True
+            for k in range(idx_i, len(sorted_agents)):
+                agent_to_update = sorted_agents[k]
+
+                node_constraints, edge_constraints, permanent_obstacles \
+                = paths_to_constraints(G,[new_plan[av] for av in agents_to_avoid])# TBD, paths to constraints.
+
+                result = SpaceTimeAStar(G,\
+                        start_nodes[agent_to_update], goal_nodes[agent_to_update],\
+                        node_constraints,edge_constraints,permanent_obstacles)
+                if result:
+                    path,_ = result
+                    new_plan[agent_to_update] = path 
+                    agents_to_avoid.append(agent_to_update)
+                else:
+                    success_update = False
+                    break
+
+            if success_update:
+                # print(new_plan)
+                cost = metric(G,new_plan,goal_nodes)
+                new_node = PT.add_PT_node(parent_node, new_plan, cost,[(j,i)])
+                new_PT_nodes.put((cost, new_node))
+
+        # Put the new PT nodes onto the STACK in non-increasing order of the cost.
+        while not new_PT_nodes.empty():
+            cost, PT_node = new_PT_nodes.get()
+            STACK.appendleft(PT_node)
+    
+    return None
+
+
+
+def PBS_OPEN(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = flowtime):
+    '''
+        Priority queue based high level search in PBS.
+    '''
+
+    #### Important convention on ordering tuples #####
+    #  An ordering tuple (a1,a2) means agent a1 has higher priority than agent a2,
+    #  meaning agent a2, along with all its priority descendents, should yield to a1.
+    ##################################################
+
+    if edge_weights is None:
+            edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
+
+    nx.set_edge_attributes(G,edge_weights,'weight')
+
+    # Initialization: 
+    # Plan inidivual paths for agent agent without considering conflicts.
+    # We simply call the standard networkx library.
+    p = nx.shortest_path(G,weight = 'weight') # The [weight] argument here should be the key to weight values in the edge data dictionary.
+    plan0 = [p[s][g] for s, g in zip(start_nodes, goal_nodes)]
+    cost0 = metric(G,plan0,goal_nodes)
+
+    PT = PriorityTree()
+    ROOT = PT.add_PT_node(None,plan0,cost0,[]) # Adding the root node. 
+
+    OPEN = PriorityQueue()
+    OPEN.put((cost0,ROOT))
+
+    count = 0
+    while not OPEN.empty() and count<=max_iter:
+        count+=1 
+        # To avoid infinite loops, we stop the algorithm when it exceeded an iteration threshold..
+
+        cost, parent_node = OPEN.get()
+        solution = PT.get_solution(parent_node)
+
+        # Look for the first conflict.
+        conflict = find_conflict(solution,check_edge_conflicts = True)
+        if not conflict:
+            
+            return solution, cost
+            # return solution
+        else:
+            a1, a2, c, t = conflict # c could either be a node or an edge.
+
+        # Get orderings upto the current node.
+        prev_ordering = PT.get_ordering(parent_node)
+
+        new_PT_nodes = PriorityQueue()
+
+        # Compute new PT nodes
+        for (j,i) in [(a1,a2),(a2,a1)]:
+
+            new_plan = deepcopy(solution)
+
+            curr_ordering = prev_ordering + [(j,i)] # The second agent in the tuple yields to the first agent
+            # print(curr_ordering)
+            sorted_agents  = list(nx.topological_sort(nx.DiGraph(curr_ordering))) # Get all the agents with lower orderings than i.
+
+            idx_i = np.where(np.array(sorted_agents)==i)[0][0]
+
+            agents_to_avoid = [a for a in sorted_agents[:idx_i]]
+
+            success_update = True
+            for k in range(idx_i, len(sorted_agents)):
+                agent_to_update = sorted_agents[k]
+
+                node_constraints, edge_constraints, permanent_obstacles \
+                = paths_to_constraints(G,[new_plan[av] for av in agents_to_avoid])# TBD, paths to constraints.
+
+                # print(node_constraints, edge_constraints, permanent_obstacles)
+
+                result = SpaceTimeAStar(G,\
+                        start_nodes[agent_to_update], goal_nodes[agent_to_update],\
+                        node_constraints,edge_constraints,permanent_obstacles)
+                if result:
+                    path,_ = result
+                    new_plan[agent_to_update] = path 
+                    agents_to_avoid.append(agent_to_update)
+                else:
+                    success_update = False
+                    break
+
+            if success_update:
+                # print('agent',i,new_plan)
+                cost = metric(G,new_plan,goal_nodes)
+                new_node = PT.add_PT_node(parent_node, new_plan, cost,[(j,i)])
+                new_PT_nodes.put((cost, new_node))
+
+        # Put the new PT nodes onto the STACK in non-increasing order of the cost.
+        while not new_PT_nodes.empty():
+            cost, PT_node = new_PT_nodes.get()
+            OPEN.put((cost,PT_node))
+    
+    return None
+            
