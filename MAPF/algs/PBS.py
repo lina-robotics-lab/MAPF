@@ -49,7 +49,7 @@ class SearchNodeContainer:
             print('Search type {} not supported.'.format(search_type))
             assert(False)
 
-def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 200, metric = 'flowtime', search_type = 'depth_first'):
+def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = 'flowtime', search_type = 'depth_first'):
     '''
         search_type: either 'depth_first' or 'best_first'.
             If 'depth_first', a stack will be used to contain the PT nodes to visit next.
@@ -74,9 +74,11 @@ def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 200, metric =
         print('Metric {} is not supported. Please input "flowtime" or "makespan".'.format(metric))
 
     if edge_weights is None:
-            edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
+        edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
+        edge_weights.update({e[::-1]:1 for e in G.edges})
 
     nx.set_edge_attributes(G,edge_weights,'weight')
+    hScore = dict(nx.shortest_path_length(G,weight = 'weight')) # The heuristic score used in SpaceTimeAStar
 
     # Initialization: 
     # Plan inidivual paths for agent agent without considering conflicts.
@@ -147,7 +149,7 @@ def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 200, metric =
                 # print('Solving SAPF',node_constraints,edge_constraints,permanent_obstacles)
                 result = SpaceTimeAStar(G,\
                         start_nodes[agent_to_update], goal_nodes[agent_to_update],\
-                        node_constraints,edge_constraints,permanent_obstacles)
+                        node_constraints,edge_constraints,permanent_obstacles, hScore = hScore)
                 if result is not None:
                     path,_ = result
                     new_plan[agent_to_update] = path 
@@ -173,7 +175,7 @@ def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 200, metric =
             cost = -neg_of_cost
             OPEN.push(cost, PT_node)
     
-    print('Count = ',count,'OPEN empty?',OPEN.empty())
+    print('Total iterations = ',count,'OPEN empty?',OPEN.empty())
     return None
 
             

@@ -50,8 +50,11 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
 
     if edge_weights is None:
         edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
-
+        edge_weights.update({e[::-1]:1 for e in G.edges})
+        
     nx.set_edge_attributes(G,edge_weights,'weight')
+
+    hScore = dict(nx.shortest_path_length(G,weight = 'weight')) # The heuristic score used in SpaceTimeAStar
 
     # Initialization: 
     # Plan inidivual paths for agent agent without considering conflicts.
@@ -108,7 +111,7 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
                
                 # Call Space-time A* algorithm to replan the agent's path.
                 result = SpaceTimeAStar(G, start_nodes[a],goal_nodes[a]\
-                                        ,node_constraints,edge_constraints)
+                                        ,node_constraints,edge_constraints, hScore = hScore)
                 
                 if result: # If there is a feasible single-agent path. 
                     path, gscore = result
@@ -121,7 +124,8 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
                     
                     # Push the new child onto the OPEN queue.
                     OPEN.put((CT.get_cost(new_node_ID),new_node_ID))
-                
+    
+    print('Total iterations = ',count,'OPEN empty?',OPEN.empty()) 
     return None
 
             

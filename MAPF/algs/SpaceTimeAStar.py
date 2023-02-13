@@ -2,7 +2,7 @@ import networkx as nx
 import numpy as np
 from queue import PriorityQueue
 
-def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanent_obstacles = None, edge_weights = None, preserve_t = False):
+def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanent_obstacles = None, edge_weights = None, preserve_t = False, hScore = None):
     '''
     
     Reference used for implementation: 
@@ -27,7 +27,11 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
         edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
             By default, the edge_weights are all set to 1.
         preserve_t: if True, the output path is a list of (s,t) pairs. Otherwise, the output is just a list of nodes s.
-       
+        
+        hScore: optional heuristic value.
+                hScore[sp][goal] underestimates the steps it takes for the agent to travel from sp to goal while observing the constraints.
+                Usually, hScore = dict(nx.shortest_path_length(G)).
+
     Objective: find a path from start to goal that minimizes the total traversal cost.
     
     Output: (path, cost). 
@@ -56,15 +60,22 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
     if edge_weights is None:
         edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
         edge_weights.update({e[::-1]:1 for e in G.edges}) 
+
+    # print('keys',list(edge_weights.keys()))
     
     ts = [t for d in (node_constraints,edge_constraints) for l in d.values() for t in l]
-    if permanent_obstacles is not None:
-        ts = ts + [t for t in permanent_obstacles.values()]
+    if permanent_obstacles is None:
+        permanent_obstacles = {}
+    
+    ts = ts + [t for t in permanent_obstacles.values()]
 
     max_T = np.max(ts)
 
     OPEN = PriorityQueue()
 
+    # nx.set_edge_attributes(G,edge_weights,'weight')
+    # h = dict(nx.shortest_path_length(G)) # The heuristic function in A* search. We use the shortest path length without considering the inter-agent conflicts as h.
+    
     gScore = {(start,0):0} # gScore[(s,t)] contains the gScore of the time-node (s,t)
 
     OPEN.put((0,(start,0))) 
@@ -74,11 +85,17 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
     cameFrom = {}
 
     while not OPEN.empty():
-        curr_gscore,(s,t) = OPEN.get() # Remove the (s, t) with the smallest gScore.
+        curr_fscore,(s,t) = OPEN.get() # Remove the (s, t) with the smallest gScore.
 
         # print(curr_gscore,(s,t),max_T)    
-        if s == goal and t>max_T: # We need to check if t has exceeded max_T, to ensure we don't terminate before some late-showing constraints hit the agent.
-            return recover_path((s,t),cameFrom),curr_gscore 
+        if s == goal and t not in permanent_obstacles.keys(): 
+            # We need to check if the agent will be hit by some late-showing constraints.
+            success = True
+            if len(node_constraints[s])>0:
+                success = t > max(node_constraints[s])
+
+            if success:
+                return recover_path((s,t),cameFrom), gScore[(s,t)] 
 
         constraint_nb = [sp for sp in G[s] if t in set(edge_constraints[(s,sp)]).union(set(edge_constraints[(sp,s)]))]\
                       + [sp for sp in G[s] if t+1 in node_constraints[sp]]
@@ -94,10 +111,11 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
             if (sp,next_t) not in gScore.keys():
                 gScore[(sp,next_t)] = np.inf
 
-            if curr_gscore + edge_weights[(s,sp)] < gScore[(sp,next_t)]: # The A* update
+            if gScore[(s,t)] + edge_weights[(s,sp)] < gScore[(sp,next_t)]: # The A* update
                 cameFrom[(sp,next_t)] = (s,t)
-                gScore[(sp,next_t)] = curr_gscore + edge_weights[(s,sp)]
-                OPEN.put((gScore[(sp,next_t)],(sp,next_t)))
+                gScore[(sp,next_t)] = gScore[(s,t)] + edge_weights[(s,sp)]
+                fScore = gScore[(sp,next_t)] if hScore is None else gScore[(sp,next_t)]+hScore[sp][goal]
+                OPEN.put((fScore,(sp,next_t)))
     
     # print('Single Agent A* search not feasible.')
     return None 
