@@ -57,6 +57,11 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
         edge_weights = {e:1 for e in G.edges} # Assume uniform weights if None is given.
         edge_weights.update({e[::-1]:1 for e in G.edges}) 
     
+    ts = [t for d in (node_constraints,edge_constraints) for l in d.values() for t in l]
+    if permanent_obstacles is not None:
+        ts = ts + [t for t in permanent_obstacles.values()]
+
+    max_T = np.max(ts)
 
     OPEN = PriorityQueue()
 
@@ -71,7 +76,8 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
     while not OPEN.empty():
         curr_gscore,(s,t) = OPEN.get() # Remove the (s, t) with the smallest gScore.
 
-        if s == goal:
+        # print(curr_gscore,(s,t),max_T)    
+        if s == goal and t>max_T: # We need to check if t has exceeded max_T, to ensure we don't terminate before some late-showing constraints hit the agent.
             return recover_path((s,t),cameFrom),curr_gscore 
 
         constraint_nb = [sp for sp in G[s] if t in set(edge_constraints[(s,sp)]).union(set(edge_constraints[(sp,s)]))]\
@@ -80,16 +86,18 @@ def SpaceTimeAStar(G, start, goal, node_constraints, edge_constraints , permanen
         if permanent_obstacles:
             constraint_nb = constraint_nb + [s for s,T in permanent_obstacles.items() if t+1>=T]
 
+        # print('constraint_nb',constraint_nb)
         free_nb =  set(G[s]).difference(constraint_nb) # free_nb are free at time t+1
 
         for sp in free_nb:
-            if (sp,t+1) not in gScore.keys():
-                gScore[(sp,t+1)] = np.inf
+            next_t = np.min([t+1,max_T+1]) # This is to ensure we switch back to standard A* instead of space-time A* after t exceeds max_T
+            if (sp,next_t) not in gScore.keys():
+                gScore[(sp,next_t)] = np.inf
 
-            if curr_gscore + edge_weights[(s,sp)] < gScore[(sp,t+1)]: # The A* update
-                cameFrom[(sp,t+1)] = (s,t)
-                gScore[(sp,t+1)] = curr_gscore + edge_weights[(s,sp)]
-                OPEN.put((gScore[(sp,t+1)],(sp,t+1)))
+            if curr_gscore + edge_weights[(s,sp)] < gScore[(sp,next_t)]: # The A* update
+                cameFrom[(sp,next_t)] = (s,t)
+                gScore[(sp,next_t)] = curr_gscore + edge_weights[(s,sp)]
+                OPEN.put((gScore[(sp,next_t)],(sp,next_t)))
     
     # print('Single Agent A* search not feasible.')
     return None 

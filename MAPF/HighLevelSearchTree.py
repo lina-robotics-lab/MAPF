@@ -1,6 +1,6 @@
 import networkx as nx
 
-class HighLevelSearchTree(nx.Graph):
+class HighLevelSearchTree(nx.DiGraph):
     def __init__(self):
         super().__init__()
         
@@ -35,7 +35,7 @@ class ConstraintTree(HighLevelSearchTree):
         new_node_ID = self.number_of_nodes()
         super().add_node(new_node_ID, solution=solution,cost=cost,constraints=constraints)
         
-        if parent_node:
+        if parent_node is not None:
             super().add_edge(parent_node,new_node_ID)
         
         return new_node_ID
@@ -48,6 +48,8 @@ class PriorityTree(HighLevelSearchTree):
         '''
             Get the orderings stored at the current PT node and its ancestors.
         '''
+
+        # print('Ancestors of PT node', ID, nx.ancestors(self,ID))
         return [c for a in nx.ancestors(self,ID).union([ID]) for c in self.__get_ordering_at__(a)]
    
     def __get_ordering_at__(self,ID):
@@ -65,7 +67,7 @@ class PriorityTree(HighLevelSearchTree):
         new_node_ID = self.number_of_nodes()
         super().add_node(new_node_ID, solution=solution,cost=cost, ordering=ordering)
         
-        if parent_node:
+        if parent_node is not None:
             super().add_edge(parent_node,new_node_ID)
         
         return new_node_ID
