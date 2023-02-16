@@ -7,13 +7,13 @@ from copy import deepcopy
 from ..metrics import flowtime, makespan
 from .SpaceTimeAStar import SpaceTimeAStar
 from ..conflict import find_conflict
-from ..HighLevelSearchTree import ConstraintTree
+from ..HighLevelSearch import ConstraintTree, SearchNodeContainer
 
-def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = 'flowtime', check_edge_conflicts = False):
+def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000,\
+         metric = 'flowtime', check_edge_conflicts = False,search_type = 'best_first'):
     '''
         Reference used for implementation:
-        The description of coupled A* algorithm in [Section: Previous Optimal Solvers, the CBS paper]^*.
-        *: [Conflict-Based Search For Optimal Multi-Agent Path Finding, AAAI 2012]
+        [Conflict-Based Search For Optimal Multi-Agent Path Finding, AAAI 2012]
 
         Inputs: 
 
@@ -65,8 +65,8 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
     CT = ConstraintTree()
     ROOT = CT.add_node(None,plan0,metric(G,plan0,goal_nodes),[]) # Adding the root node. 
 
-    OPEN = PriorityQueue()
-    OPEN.put((CT.get_cost(ROOT),ROOT)) 
+    OPEN = SearchNodeContainer(search_type)
+    OPEN.push(CT.get_cost(ROOT),ROOT) 
 
     count = 0
     while not OPEN.empty() and count<=max_iter:
@@ -75,7 +75,7 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
         # To avoid infinite loops, we stop it when it exceeded an iteration threshold..
         
 
-        cost, parent_node = OPEN.get()
+        cost, parent_node = OPEN.pop()
         solution = CT.get_solution(parent_node)
 
         # Look for the first conflict.
@@ -83,6 +83,7 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
 
         # print(OPEN.queue, conflict,solution)
         if not conflict:
+            # print('Total iterations = ',count,'OPEN empty?',OPEN.empty()) 
             return solution, cost
         else:
             
@@ -91,6 +92,7 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
             # Get existing constraints
             constraints = CT.get_constraints(parent_node)
             
+            new_CT_nodes = PriorityQueue()
             for a in (a1,a2): # Create two children of the current CT node.
                 a_constraints = [(a,c,t)]+constraints
                 
@@ -108,6 +110,8 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
                                 edge_constraints[cp].add(tp)
                             elif cp[::-1] in edge_constraints.keys(): # cp[::-1] is the reversion of cp.
                                 edge_constraints[cp[::-1]].add(tp)
+
+                # print(edge_constraints)
                
                 # Call Space-time A* algorithm to replan the agent's path.
                 result = SpaceTimeAStar(G, start_nodes[a],goal_nodes[a]\
@@ -118,12 +122,22 @@ def CBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric 
                     new_solution = deepcopy(solution)
                     new_solution[a] = path
                     
+                    cost = metric(G,new_solution,goal_nodes)
                     # Create a new child in the Constraint Tree.
                     new_node_ID = CT.add_node(parent_node, new_solution,\
-                                                 metric(G,new_solution,goal_nodes),[(a,c,t)])
+                                                 cost,[(a,c,t)])
                     
-                    # Push the new child onto the OPEN queue.
-                    OPEN.put((CT.get_cost(new_node_ID),new_node_ID))
+                    neg_of_cost = -cost
+                    # print('Adding PT node', new_node, 'from parent_node', parent_node,'New ordering',PT.get_ordering(new_node),'Order added', new_order)
+                    new_CT_nodes.put((neg_of_cost, new_node_ID)) # This is to ensure the CT node with higher cost will be removed first.
+
+            # Put the (at most two) new CT nodes onto OPEN in non-increasing order of the cost.
+            while not new_CT_nodes.empty():
+                neg_of_cost, CT_node = new_CT_nodes.get()
+                cost = -neg_of_cost
+                OPEN.push(cost, CT_node)
+            # # Push the new child onto the OPEN queue.
+            # OPEN.push(CT.get_cost(new_node_ID),new_node_ID)
     
     print('Total iterations = ',count,'OPEN empty?',OPEN.empty()) 
     return None

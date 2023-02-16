@@ -7,7 +7,7 @@ from copy import deepcopy
 from ..metrics import flowtime, makespan
 from .SpaceTimeAStar import SpaceTimeAStar
 from ..conflict import find_conflict
-from ..HighLevelSearchTree import PriorityTree
+from ..HighLevelSearch import PriorityTree, SearchNodeContainer
 
 def paths_to_constraints(G,paths):
     node_constraints = {s:set() for s in G}
@@ -26,40 +26,43 @@ def paths_to_constraints(G,paths):
     
     return node_constraints,edge_constraints, permanent_obstacles
 
-class SearchNodeContainer:
+
+def PBS(G, start_nodes,goal_nodes, edge_weights = None,\
+         max_iter = 2000, metric = 'flowtime', search_type = 'depth_first'):
     '''
-        The type of the search node container determines the nature of the tree search algorithm.
+        Reference used for implementation:
+        [Searching with Consistent Prioritization for Multi-Agent Path Finding, AAAI 2019]
 
-        Pushing the search nodes onto a stack corresponds to the depth-first search.
+        Inputs: 
 
-        Pushing the search nodes onto a priority queue corresponds to the best-first search.
-    '''
-    def __init__(self, search_type = 'depth_first'):
-        if search_type == 'depth_first':
-            self.container = deque()
-            self.push = lambda cost, node_ID: self.container.appendleft((cost,node_ID))
-            self.pop = lambda : self.container.popleft()
-            self.empty = lambda : len(self.container) == 0
-        elif search_type == 'best_first':
-            self.container = PriorityQueue()
-            self.push = lambda cost, node_ID: self.container.put((cost,node_ID))
-            self.pop = lambda : self.container.get()
-            self.empty = self.container.empty
-        else:
-            print('Search type {} not supported.'.format(search_type))
-            assert(False)
+                G: the graph.
+                start_nodes: a tuple of starting positions in the graph. 
+                goal_nodes: a tuple of goal positions in the graph.
 
-def PBS(G, start_nodes,goal_nodes, edge_weights = None, max_iter = 2000, metric = 'flowtime', search_type = 'depth_first'):
-    '''
-        search_type: either 'depth_first' or 'best_first'.
-            If 'depth_first', a stack will be used to contain the PT nodes to visit next.
+                Our implementation here assumes the MAPF problem is labeled: that is the goals are pre-assigned to the agents, meaning agent k must go to goal k.
+               
+                edge_weights: a dictionationary {edge:cost for edge in G.edges}, specifying the travel costs along the edges.
+                By default, the edge_weights are all set to 1.
+                
+                max_iter: the maximal number of iteration allowed to run CBS.
+                    CBS does not have a way to determine infeasibility. 
+                    To avoid infinite loops, we stop it when it exceeded an iteration threshold..
+                
+                metric: the MAPF objective to minimize. By default, it is flowtime. But metric.makespan can also be used if desired.
+                
+                search_type: either 'depth_first' or 'best_first'.
+                    If 'depth_first', a stack will be used to contain the PT nodes to visit next.
 
-            Rigorously speaking, the depth_first option in PBS is a biased depth-first search. 
-            According to the original paper, after creating two children nodes from a parent node, the child with the lower cost will be visited first.
-            Despite this bias, the PT tree still grows in the direction of depth, rather than in breadth or the best OPEN node.
-            Therefore, we still call this option depth-first search.
+                    Rigorously speaking, the depth_first option in PBS is a biased depth-first search. 
+                    According to the original paper, after creating two children nodes from a parent node, the child with the lower cost will be visited first.
+                    Despite this bias, the PT tree still grows in the direction of depth, rather than in breadth or the best OPEN node.
+                    Therefore, we still call this option depth-first search.
 
-            If 'best_first', a PriorityQueue will be used instead.
+                    If 'best_first', a PriorityQueue will be used instead.
+        Output:
+                solution, cost: an numpy array of M single-agent paths(M is the number of agents), conflict-free and with the smallest cost(flowtime by default).
+                
+                solution[i] is the path for agent i.
     '''
     #### Important convention on ordering tuples #####
     #  An ordering tuple (a1,a2) means agent a1 has higher priority than agent a2,

@@ -1,5 +1,11 @@
 import numpy as np
 def find_conflict(plan,check_edge_conflicts = False):
+    '''
+        A node conflict (a1,a2,s,t) means agent a1, a2 are both at node s at time t.
+
+        An edge conflict (a1,a2,(s,sp),t) means agent a1(a2) started at node s(sp) at time t and enters node sp(s) at time t+1.
+
+    '''
     loc_ptrs = [0 for _ in plan]
 
     def step():

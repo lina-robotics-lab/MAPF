@@ -1,4 +1,28 @@
 import networkx as nx
+from queue import deque, PriorityQueue
+
+class SearchNodeContainer:
+    '''
+        The type of the search node container determines the nature of the tree search algorithm.
+
+        Pushing the search nodes onto a stack corresponds to the depth-first search.
+
+        Pushing the search nodes onto a priority queue corresponds to the best-first search.
+    '''
+    def __init__(self, search_type = 'depth_first'):
+        if search_type == 'depth_first':
+            self.container = deque()
+            self.push = lambda cost, node_ID: self.container.appendleft((cost,node_ID))
+            self.pop = lambda : self.container.popleft()
+            self.empty = lambda : len(self.container) == 0
+        elif search_type == 'best_first':
+            self.container = PriorityQueue()
+            self.push = lambda cost, node_ID: self.container.put((cost,node_ID))
+            self.pop = lambda : self.container.get()
+            self.empty = self.container.empty
+        else:
+            print('Search type {} not supported.'.format(search_type))
+            assert(False)
 
 class HighLevelSearchTree(nx.DiGraph):
     def __init__(self):
